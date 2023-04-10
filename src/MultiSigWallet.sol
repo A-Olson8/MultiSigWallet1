@@ -139,7 +139,7 @@ contract MultiSigTransferLogic is MultiSigState{
 
         if(IERC721(_contractAddress).ownerOf(_tokenId) != address(this)) { revert ContractDoesNotOwnToken(); }
 
-        ++ transactionKey;
+        ++transactionKey;
         uint128 txIndex = transactionKey; 
 
         transactions[txIndex] = Transaction(true, _to, _contractAddress, false, 0, _tokenId, "");
