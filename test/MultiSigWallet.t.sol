@@ -65,12 +65,12 @@ contract MultiSigTest1 is Test {
 
     //the 4 functions below are for testing the modifiers in MultiSig
     function testOnlyOwner() public {
-        vm.expectRevert(bytes("not owner"));
+        vm.expectRevert(notOwner.selector);
         test4.checkOnlyOwner(address(multiSig), 0); // test4 is not an owner
     }
 
     function testTransactionExists() public {
-        vm.expectRevert(bytes("tx does not exist"));
+        vm.expectRevert(TxDoesNotExist.selector);
         multiSig.revokeApproval(1);
     }
 
@@ -83,7 +83,7 @@ contract MultiSigTest1 is Test {
         test3.approveTransfer(address(multiSig), 1);
         multiSig.executeEthTransaction(1); // executes transaction
 
-        vm.expectRevert(bytes("tx already executed"));
+        vm.expectRevert(TxAlreadyExecuted.selector);
         multiSig.executeEthTransaction(1);
     }
 
@@ -92,7 +92,7 @@ contract MultiSigTest1 is Test {
         multiSig.requestEthTransfer(adr2, 1000000e18, "");
 
         test2.approveTransfer(address(multiSig), 1); // approves once
-        vm.expectRevert(bytes("tx already confirmed"));
+        vm.expectRevert(TxAlreadyConfirmed.selector);
         test2.approveTransfer(address(multiSig), 1); // can't approve twice
     }
 
@@ -120,19 +120,19 @@ contract MultiSigTest1 is Test {
 
     function testBalancerevert1() public { // line 65
         multiSig.depositEth{value: 1000000e18}();
-        vm.expectRevert(bytes("Ether balance too low"));
+        vm.expectRevert(EtherBalanceTooLow.selector);
         multiSig.requestEthTransfer(adr1, 1000001e18, "");
     }
 
     function testBalancerevert2() public { // line 82
         test3.transferERC20(address(token), address(multiSig), 1000000e18);
-        vm.expectRevert(bytes("Token balance too low"));
+        vm.expectRevert(TokenBalanceTooLow.selector);
         test2.requestERC20Transfer(address(multiSig), address(token), adr2, 1000001e18);
     }
 
     function testBalancerevert3() public { // line 99
         test2.transferNFT(address(nft), address(multiSig), 0);
-        vm.expectRevert(bytes("Contract does not own token"));
+        vm.expectRevert(ContractDoesNotOwnToken.selector);
         test3.requestNFTTransfer(address(multiSig), address(nft), adr1, 1);
     }
 
@@ -148,10 +148,10 @@ contract MultiSigTest1 is Test {
         test2.approveTransfer(address(multiSig), 1);
         test3.approveTransfer(address(multiSig), 1);
 
-        vm.expectRevert(bytes("transaction is not ERC20 token"));
+        vm.expectRevert(TransactionIsNotERC20Token.selector);
         multiSig.executeErc20Transaction(1);
 
-        vm.expectRevert(bytes("transaction is not an NFT Token")); // can only be used for eth transaction
+        vm.expectRevert(TransactionIsNotAnNFTToken.selector); // can only be used for eth transaction
         test3.executeNFTTransaction(address(multiSig), 1);
     }
 
@@ -163,9 +163,9 @@ contract MultiSigTest1 is Test {
         test2.approveTransfer(address(multiSig), 1);
         test3.approveTransfer(address(multiSig), 1);
 
-        vm.expectRevert(bytes("transaction is not an Ether transaction"));
+        vm.expectRevert(TransactionIsNotAnEtherTransaction.selector);
         test2.executeEthTransaction(address(multiSig), 1);
-        vm.expectRevert(bytes("transaction is not an NFT Token")); // can only be used for an erc20 transaction
+        vm.expectRevert(TransactionIsNotAnNFTToken.selector); // can only be used for an erc20 transaction
         test3.executeNFTTransaction(address(multiSig), 1);
     }
 
@@ -177,9 +177,9 @@ contract MultiSigTest1 is Test {
         test2.approveTransfer(address(multiSig), 1);
         test3.approveTransfer(address(multiSig), 1);
 
-        vm.expectRevert(bytes("transaction is not an Ether transaction"));
+        vm.expectRevert(TransactionIsNotAnEtherTransaction.selector);
         test3.executeEthTransaction(address(multiSig), 1);
-        vm.expectRevert(bytes("transaction is not ERC20 token")); // can only be used on an erc20 transaction
+        vm.expectRevert(TransactionIsNotERC20Token.selector); // can only be used on an erc20 transaction
         multiSig.executeErc20Transaction(1);
     }
 
@@ -191,11 +191,11 @@ contract MultiSigTest1 is Test {
         multiSig.requestErc20Transfer(adr3, address(token), 100000e18);
 
         test2.approveTransfer(address(multiSig), 1); // approval 1
-        vm.expectRevert(bytes("Not enough approvals to execute tx"));
+        vm.expectRevert(NotEnoughApprovalsToExecuteTx.selector);
         test2.executeEthTransaction(address(multiSig), 1);
 
         test3.approveTransfer(address(multiSig), 1); // approval 2 (3 needed)
-        vm.expectRevert(bytes("Not enough approvals to execute tx"));
+        vm.expectRevert(NotEnoughApprovalsToExecuteTx.selector);
         test3.executeEthTransaction(address(multiSig), 1);
     }
 
@@ -204,11 +204,11 @@ contract MultiSigTest1 is Test {
         multiSig.requestErc20Transfer(adr3, address(token), 100000e18);
 
         multiSig.approveTransaction(1); // approval 1
-        vm.expectRevert(bytes("Not enough approvals to execute tx"));
+        vm.expectRevert(NotEnoughApprovalsToExecuteTx.selector);
         multiSig.executeErc20Transaction(1);
 
         test2.approveTransfer(address(multiSig), 1); // approval 2
-        vm.expectRevert(bytes("Not enough approvals to execute tx"));
+        vm.expectRevert(NotEnoughApprovalsToExecuteTx.selector);
         multiSig.executeErc20Transaction(1);
     }
 
@@ -217,11 +217,11 @@ contract MultiSigTest1 is Test {
         test3.requestNFTTransfer(address(multiSig), address(nft), adr3, 1);
 
         multiSig.approveTransaction(1); // approval 1
-        vm.expectRevert(bytes("Not enough approvals to execute tx"));
+        vm.expectRevert(NotEnoughApprovalsToExecuteTx.selector);
         test3.executeNFTTransaction(address(multiSig), 1);
 
         test3.approveTransfer(address(multiSig), 1); // approval 2
-        vm.expectRevert(bytes("Not enough approvals to execute tx"));
+        vm.expectRevert(NotEnoughApprovalsToExecuteTx.selector);
         test2.executeNFTTransaction(address(multiSig), 1);
     }
 
@@ -304,6 +304,7 @@ contract MultiSigTest1 is Test {
     // for receiving eth in testEthTransaction()
     receive() external payable {}
 }
+
 
 
 
