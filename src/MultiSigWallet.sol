@@ -12,6 +12,19 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 // requestErc20Transfer() => approveTransaction() => ExecuteErc20Transaction();
 // requestNFTTransfer() => approveTransaction() => ExecuteNFTTransaction();
 
+    error notOwner();
+    error TxDoesNotExist();
+    error TxAlreadyExecuted();
+    error TxAlreadyConfirmed();
+    error EtherBalanceTooLow();
+    error TokenBalanceTooLow();
+    error ContractDoesNotOwnToken();
+    error TxNotConfirmed();
+    error NotEnoughApprovalsToExecuteTx();
+    error TransactionIsNotAnEtherTransaction();
+    error TransactionIsNotERC20Token();
+    error TransactionIsNotAnNFTToken();
+    error TxFailed();
 
 contract MultiSigState is ReentrancyGuard {
     event EthDeposited(address indexed sender, uint indexed amount, uint ContractBalance);
@@ -21,6 +34,8 @@ contract MultiSigState is ReentrancyGuard {
     event TransactionApprovedBy(address indexed from, uint indexed txIndex);
     event ApprovalRevokedBy(address indexed from, uint indexed txIndex);
     event TransactionExecuted(address indexed from, uint indexed txIndex, bool isERC20, bool isNFT);
+
+    
 
     address[] public owners;  // array of owners
     uint128 public numApprovalsRequired;  // number of approvals required to transfer ETH, ERC20, or NFT;
@@ -40,24 +55,41 @@ contract MultiSigState is ReentrancyGuard {
     }
 
     modifier onlyOwners() {  //checks that msg.sender is an owner
-        require(isOwner[msg.sender], "not owner");
+        getOnlyOwners();
         _;
     }
 
     modifier txExists(uint _txIndex) {  // checks that the tx is within the transactions array
-        require(_txIndex <= transactionKey, "tx does not exist");
+        getTxExists(_txIndex);
         _;
     }
 
     modifier notExecuted(uint128 _txIndex) { // verifies that the tx hasn't been executed
-        require(!transactions[_txIndex].isExecuted, "tx already executed");
+        getNotExecuted(_txIndex);
         _;
     }
 
     modifier notApproved(uint _txIndex) {  // checks if an owner approved a certain transaction within the isApproved double mapping
-        require(!isApproved[_txIndex][msg.sender], "tx already confirmed");  
+        getnotApproved(_txIndex);  
         _;
     }
+
+    function getOnlyOwners() private view {
+        if(!isOwner[msg.sender]) { revert notOwner(); }
+    }
+
+    function getTxExists(uint _txIndex) private view {
+        if(_txIndex > transactionKey) { revert TxDoesNotExist(); }
+    }
+
+    function getNotExecuted(uint128 _txIndex) private view {
+        if(transactions[_txIndex].isExecuted) { revert TxAlreadyExecuted(); }
+    }
+
+    function getnotApproved(uint _txIndex) private view {
+        if(isApproved[_txIndex][msg.sender]) { revert TxAlreadyConfirmed(); }
+    }
+
 }
 
 contract MultiSigTransferLogic is MultiSigState{
@@ -65,12 +97,13 @@ contract MultiSigTransferLogic is MultiSigState{
     function requestEthTransfer(
         address _to, 
         uint _value, 
-        bytes memory _data) 
+        bytes calldata _data) 
         external 
         onlyOwners {
 
-        require(address(this).balance >= _value, "Ether balance too low");
-        transactionKey++;
+        if(address(this).balance < _value) { revert EtherBalanceTooLow(); }
+
+        ++transactionKey;
         uint128 txIndex = transactionKey;
 
         transactions[txIndex] = Transaction(false, _to, address(0), false, 0, _value, _data);
@@ -86,8 +119,9 @@ contract MultiSigTransferLogic is MultiSigState{
         external 
         onlyOwners { 
 
-        require(IERC20(_contractAddress).balanceOf(address(this)) >= _value, "Token balance too low");
-        transactionKey++;
+        if(IERC20(_contractAddress).balanceOf(address(this)) < _value) { revert TokenBalanceTooLow(); }
+        
+        ++transactionKey;
         uint128 txIndex = transactionKey;
 
         transactions[txIndex] = Transaction(false, _to, _contractAddress, false, 0, _value, "");
@@ -103,8 +137,9 @@ contract MultiSigTransferLogic is MultiSigState{
         external 
         onlyOwners { 
 
-        require(IERC721(_contractAddress).ownerOf(_tokenId) == address(this), "Contract does not own token");
-        transactionKey++;
+        if(IERC721(_contractAddress).ownerOf(_tokenId) != address(this)) { revert ContractDoesNotOwnToken(); }
+
+        ++ transactionKey;
         uint128 txIndex = transactionKey; 
 
         transactions[txIndex] = Transaction(true, _to, _contractAddress, false, 0, _tokenId, "");
@@ -142,7 +177,7 @@ contract MultiSigTransferLogic is MultiSigState{
 
         Transaction storage transaction = transactions[_txIndex];
 
-        require(isApproved[_txIndex][msg.sender], "tx not confirmed");
+        if(!isApproved[_txIndex][msg.sender]) { revert TxNotConfirmed(); }
 
         transaction.numberOfApprovals -= 1;
         isApproved[_txIndex][msg.sender] = false;
@@ -162,15 +197,16 @@ contract MultiSigTransferLogic is MultiSigState{
 
         Transaction storage transaction = transactions[_txIndex];
 
-        require(transaction.numberOfApprovals >= numApprovalsRequired, "Not enough approvals to execute tx");
-        require(transaction.isNFT == false && transaction.tokenContract == address(0), "transaction is not an Ether transaction");
+        if(transaction.numberOfApprovals < numApprovalsRequired) { revert NotEnoughApprovalsToExecuteTx(); }
+        if(transaction.isNFT == true || transaction.tokenContract != address(0)) { revert TransactionIsNotAnEtherTransaction(); }
 
         transaction.isExecuted = true;
 
         (bool success, ) = transaction.to.call{value: transaction.valueOrTokenId}(
             transaction.data
         );
-        require(success, "tx failed");
+
+        if(!success) { revert TxFailed(); }
 
         emit TransactionExecuted(msg.sender, _txIndex, false, false);
     }
@@ -186,8 +222,8 @@ contract MultiSigTransferLogic is MultiSigState{
         Transaction storage transaction = transactions[_txIndex];
         address token = transaction.tokenContract;
 
-        require(transaction.numberOfApprovals >= numApprovalsRequired, "Not enough approvals to execute tx");
-        require(transaction.isNFT == false && token != address(0), "transaction is not ERC20 token");
+        if(transaction.numberOfApprovals < numApprovalsRequired) { revert NotEnoughApprovalsToExecuteTx(); }
+        if(transaction.isNFT == true || token == address(0)) { revert TransactionIsNotERC20Token(); }
 
         transaction.isExecuted = true;
 
@@ -206,8 +242,8 @@ contract MultiSigTransferLogic is MultiSigState{
         Transaction storage transaction = transactions[_txIndex];
         address token = transaction.tokenContract;
 
-        require(transaction.numberOfApprovals >= numApprovalsRequired, "Not enough approvals to execute tx");
-        require(transaction.isNFT == true && token != address(0), "transaction is not an NFT Token");
+        if(transaction.numberOfApprovals < numApprovalsRequired) { revert NotEnoughApprovalsToExecuteTx(); }
+        if(transaction.isNFT == false || token == address(0)) { revert TransactionIsNotAnNFTToken(); }
 
         transaction.isExecuted = true;
 
@@ -267,7 +303,7 @@ contract MultiSigCore is MultiSigDepositLogic {
             "number of required confirmations is out of bount"
         );
 
-        for (uint i = 0; i < _listOfOwners.length; i++) {
+        for (uint i; i < _listOfOwners.length;) {
             address owner = _listOfOwners[i];
 
             require(owner != address(0), "invalid owner");
@@ -275,6 +311,8 @@ contract MultiSigCore is MultiSigDepositLogic {
 
             isOwner[owner] = true;  // sets owner variables for each owner listed within array
             owners.push(owner);
+
+            unchecked { ++i; }
         }
 
         numApprovalsRequired = _numApprovalsRequired;
@@ -292,15 +330,15 @@ contract MultiSigCore is MultiSigDepositLogic {
         return IERC721(_tokenAddress).balanceOf(address(this));
     }
 
-    function getOwners() public view returns (address[] memory) {
+    function getOwners() external view returns (address[] memory) {
         return owners;
     }
 
-    function getTransactionCount() public view returns (uint) {
+    function getTransactionCount() external view returns (uint) {
         return transactionKey;
     }
 
-    function getNumberofApprovals(uint128 _index) public view returns (uint88) {
+    function getNumberofApprovals(uint128 _index) external view returns (uint88) {
         return transactions[_index].numberOfApprovals;
     }
 
