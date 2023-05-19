@@ -44,10 +44,10 @@ contract MultiSigTest1 is Test {
     }
 
     // The three tests below are for transferring Eth, erc20, and nft tokens to the multiSig wallet;
-    function testETHDeposit() public {
-        multiSig.depositEth{value: 1000000e18}();
+    function testETHDeposit(uint96 _amount) public {
+        multiSig.depositEth{value: _amount}();
         uint balance = multiSig.getEtherBalance();
-        assertEq(balance, 1000000e18);
+        assertEq(balance, _amount);
     }
 
     function testNFTDeposit() public {
@@ -57,10 +57,10 @@ contract MultiSigTest1 is Test {
         assertEq(balance, 2);
     }
 
-    function testERC20Deposit() public {
-        test3.transferERC20(address(token), address(multiSig), 1000000e18);
+    function testERC20Deposit(uint96 _amount) public {
+        test3.transferERC20(address(token), address(multiSig), _amount);
         uint balance = multiSig.getErc20Balance(address(token));
-        assertEq(balance, 1000000e18);
+        assertEq(balance, _amount);
     }
 
     //the 4 functions below are for testing the modifiers in MultiSig
@@ -74,9 +74,9 @@ contract MultiSigTest1 is Test {
         multiSig.revokeApproval(1);
     }
 
-    function testNotEcecuted() public {
-        multiSig.depositEth{value: 1000000e18}();
-        multiSig.requestEthTransfer(adr2, 1000000e18, "");
+    function testNotEcecuted(uint96 _amount) public {
+        multiSig.depositEth{value: _amount}();
+        multiSig.requestEthTransfer(adr2, _amount, "");
 
         multiSig.approveTransaction(1); // three approvals
         test2.approveTransfer(address(multiSig), 1);
@@ -87,9 +87,9 @@ contract MultiSigTest1 is Test {
         multiSig.executeEthTransaction(1);
     }
 
-    function testNotApproved() public {
-        multiSig.depositEth{value: 1000000e18}();
-        multiSig.requestEthTransfer(adr2, 1000000e18, "");
+    function testNotApproved(uint96 _amount) public {
+        multiSig.depositEth{value: _amount}();
+        multiSig.requestEthTransfer(adr2, _amount, "");
 
         test2.approveTransfer(address(multiSig), 1); // approves once
         vm.expectRevert(TxAlreadyConfirmed.selector);
@@ -97,9 +97,9 @@ contract MultiSigTest1 is Test {
     }
 
     // Tests that the approvals will increment when they are supposed to, and that they will be revoked when revokeApproval is called;
-    function testApproveThenRevoke() public {
-        multiSig.depositEth{value: 1000000e18}();
-        multiSig.requestEthTransfer(adr2, 1000000e18, "");
+    function testApproveThenRevoke(uint96 _amount) public {
+        multiSig.depositEth{value: _amount}();
+        multiSig.requestEthTransfer(adr2, _amount, "");
 
         multiSig.approveTransaction(1); // approve
         test2.approveTransfer(address(multiSig), 1); // approve
@@ -118,16 +118,18 @@ contract MultiSigTest1 is Test {
 
     // The 3 functions below are testing that the require statements that check the balances actually works (lines 65, 82, 99)
 
-    function testBalancerevert1() public { // line 65
-        multiSig.depositEth{value: 1000000e18}();
+    function testBalancerevert1(uint96 _amount) public { // line 65
+        vm.assume(_amount < type(uint96).max);
+        multiSig.depositEth{value: _amount}();
         vm.expectRevert(EtherBalanceTooLow.selector);
-        multiSig.requestEthTransfer(adr1, 1000001e18, "");
+        multiSig.requestEthTransfer(adr1, _amount + 1, "");
     }
 
-    function testBalancerevert2() public { // line 82
-        test3.transferERC20(address(token), address(multiSig), 1000000e18);
+    function testBalancerevert2(uint96 _amount) public { // line 82
+        vm.assume(_amount < type(uint96).max);
+        test3.transferERC20(address(token), address(multiSig), _amount);
         vm.expectRevert(TokenBalanceTooLow.selector);
-        test2.requestERC20Transfer(address(multiSig), address(token), adr2, 1000001e18);
+        test2.requestERC20Transfer(address(multiSig), address(token), adr2, _amount + 1);
     }
 
     function testBalancerevert3() public { // line 99
@@ -140,9 +142,10 @@ contract MultiSigTest1 is Test {
     // Or that approved ERC20 transfers can't be used in the executeEthTransaction or executeNFTTransaction...
     // Or that NFT transfers can't be used in the executeEthTransaction or executeErc20Transaction functions (lines 159, 183, 203)
 
-    function testTransactionRevert1() public { // line 159
-        multiSig.depositEth{value: 1000000e18}();
-        test3.requestEthTransfer(address(multiSig), adr1, 1000000e18);
+    function testTransactionRevert1(uint96 _amount, uint96 _amountToSend) public { // line 159
+        vm.assume(_amount >= _amountToSend && _amountToSend > 0);
+        multiSig.depositEth{value: _amount}();
+        test3.requestEthTransfer(address(multiSig), adr1, _amountToSend);
 
         multiSig.approveTransaction(1);
         test2.approveTransfer(address(multiSig), 1);
@@ -155,9 +158,10 @@ contract MultiSigTest1 is Test {
         test3.executeNFTTransaction(address(multiSig), 1);
     }
 
-    function testTransactionRevert2() public { // line 183
-        test3.transferERC20(address(token), address(multiSig), 1000000e18);
-        multiSig.requestErc20Transfer(adr3, address(token), 100000e18);
+    function testTransactionRevert2(uint96 _amount, uint96 _amountToSend) public { // line 183
+        vm.assume(_amount >= _amountToSend && _amountToSend > 0);
+        test3.transferERC20(address(token), address(multiSig), _amount);
+        multiSig.requestErc20Transfer(adr3, address(token), _amountToSend);
 
         multiSig.approveTransaction(1);
         test2.approveTransfer(address(multiSig), 1);
@@ -186,10 +190,11 @@ contract MultiSigTest1 is Test {
     // The functions below are testing if the executeEthTransaction, executeErc20Transaction, or executeNFTTransaction...
     // revert if there is not enough approvals to execute these transactions (lines 158, 182, 202)
 
-    function testlowApprovalEth() public  { // line 158
-        test3.transferERC20(address(token), address(multiSig), 1000000e18);
-        multiSig.requestErc20Transfer(adr3, address(token), 100000e18);
-
+    function testlowApprovalEth(uint96 _amount, uint96 _amountToSend) public  { // line 158
+        vm.assume(_amount >= _amountToSend && _amountToSend > 0);
+        multiSig.depositEth{value: _amount}();
+        test3.requestEthTransfer(address(multiSig), adr1, _amountToSend);
+        
         test2.approveTransfer(address(multiSig), 1); // approval 1
         vm.expectRevert(NotEnoughApprovalsToExecuteTx.selector);
         test2.executeEthTransaction(address(multiSig), 1);
@@ -199,9 +204,10 @@ contract MultiSigTest1 is Test {
         test3.executeEthTransaction(address(multiSig), 1);
     }
 
-    function testlowApprovalErc20() public { // line 182
-        test3.transferERC20(address(token), address(multiSig), 1000000e18);
-        multiSig.requestErc20Transfer(adr3, address(token), 100000e18);
+    function testlowApprovalErc20(uint96 _amount, uint96 _amountToSend) public { // line 182
+        vm.assume(_amount >= _amountToSend && _amountToSend > 0);
+        test3.transferERC20(address(token), address(multiSig), _amount);
+        multiSig.requestErc20Transfer(adr3, address(token), _amountToSend);
 
         multiSig.approveTransaction(1); // approval 1
         vm.expectRevert(NotEnoughApprovalsToExecuteTx.selector);
@@ -227,14 +233,15 @@ contract MultiSigTest1 is Test {
 
     // The function below checks that the transactionKey actually increments with each new transaction 
 
-    function testTransactionKeyIncrement() public {
-        multiSig.depositEth{value: 1000000e18}();
-        multiSig.requestEthTransfer(adr2, 1000000e18, "");
+    function testTransactionKeyIncrement(uint96 _amount, uint96 _amountToSend) public {
+        vm.assume(_amount >= _amountToSend && _amountToSend > 0);
+        multiSig.depositEth{value: _amount}();
+        test3.requestEthTransfer(address(multiSig), adr1, _amountToSend);
         uint key = multiSig.getTransactionCount();
         assertEq(key, 1); // nonce/key = 1
 
-        test3.transferERC20(address(token), address(multiSig), 1000000e18);
-        test3.requestERC20Transfer(address(multiSig), address(token), adr3, 1000000e18);
+        test3.transferERC20(address(token), address(multiSig), _amount);
+        multiSig.requestErc20Transfer(adr3, address(token), _amountToSend);
         uint key2 = multiSig.getTransactionCount();
         assertEq(key2, 2); // key = 2
 
@@ -247,9 +254,10 @@ contract MultiSigTest1 is Test {
 
     // The functions below test that the transactions actually go through when modifiers and require statements are passed
 
-    function testEthTransaction() public {
-        multiSig.depositEth{value: 100e18}();
-        test2.requestEthTransfer(address(multiSig), adr1, 60e18);
+    function testEthTransaction(uint96 _amount, uint96 _amountToSend) public {
+        vm.assume(_amount >= _amountToSend && _amountToSend > 0);
+        multiSig.depositEth{value: _amount}();
+        test2.requestEthTransfer(address(multiSig), adr1, _amountToSend);
         multiSig.approveTransaction(1);
         test2.approveTransfer(address(multiSig), 1);
         test3.approveTransfer(address(multiSig), 1); 
@@ -257,12 +265,13 @@ contract MultiSigTest1 is Test {
         test2.executeEthTransaction(address(multiSig), 1); // transfer eth
 
         uint balance1 = multiSig.getEtherBalance();
-        assertEq(balance1, 40e18);
+        assertEq(balance1, _amount - _amountToSend);
     }
 
-    function testErc20Transaction() public {
-        test3.transferERC20(address(token), address(multiSig), 1000000e18);
-        multiSig.requestErc20Transfer(adr1, address(token), 100000e18);
+    function testErc20Transaction(uint96 _amount, uint96 _amountToSend) public {
+        vm.assume(_amount >= _amountToSend && _amountToSend > 0);
+        test3.transferERC20(address(token), address(multiSig), _amount);
+        multiSig.requestErc20Transfer(adr1, address(token), _amountToSend);
         multiSig.approveTransaction(1);
         test2.approveTransfer(address(multiSig), 1);
         test3.approveTransfer(address(multiSig), 1);
@@ -271,8 +280,8 @@ contract MultiSigTest1 is Test {
 
         uint balance1 = IERC20(address(token)).balanceOf(address(multiSig));
         uint balance2 = IERC20(address(token)).balanceOf(adr1);
-        assertEq(balance1, 900000e18);
-        assertEq(balance2, 100000e18);
+        assertEq(balance1, _amount - _amountToSend);
+        assertEq(balance2, _amountToSend);
     }
 
     function testNFTTransaction() public {
@@ -304,6 +313,9 @@ contract MultiSigTest1 is Test {
     // for receiving eth in testEthTransaction()
     receive() external payable {}
 }
+
+
+
 
 
 
