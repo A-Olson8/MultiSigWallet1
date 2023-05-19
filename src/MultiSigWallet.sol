@@ -227,7 +227,8 @@ contract MultiSigTransferLogic is MultiSigState{
 
         transaction.isExecuted = true;
 
-        IERC20(token).transfer(transaction.to, transaction.valueOrTokenId);
+        bool success = IERC20(token).transfer(transaction.to, transaction.valueOrTokenId);
+        require(success);
 
         emit TransactionExecuted(msg.sender, _txIndex, true, false);
     }
@@ -261,7 +262,8 @@ contract MultiSigDepositLogic is MultiSigTransferLogic {
      
      // must approve on front end or send ERC20 token directly;
     function depositERC20(address _tokenAddress, uint _amount) external onlyOwners {  
-        IERC20(_tokenAddress).transferFrom(msg.sender, address(this), _amount);
+        bool success = IERC20(_tokenAddress).transferFrom(msg.sender, address(this), _amount);
+        require(success);
 
         uint balance = IERC20(_tokenAddress).balanceOf(address(this));
 
